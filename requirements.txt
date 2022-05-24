@@ -3,3 +3,4 @@ datasets
 transformers
 sentencepiece
 fasttext
+streamlit_option_menu

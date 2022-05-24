@@ -3,18 +3,24 @@ from typing import List, Tuple
 import fasttext
 from datasets.utils.download_manager import DownloadManager
 
-# pretrained_lang_model_url = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz"
-pretrained_lang_model_url = "https://huggingface.co/julien-c/fasttext-language-id/resolve/main/lid.176.ftz"
-
-dl_manager = DownloadManager()
-model = fasttext.load_model(dl_manager.download(pretrained_lang_model_url))
+import streamlit as st
 
 prefix_length = len("__label__")
 
 space_seperated_langs = ["en"]
 
 
+@st.experimental_singleton
+def get_fasttext_model():
+  # pretrained_lang_model_url = "https://dl.fbaipublicfiles.com/fasttext/supervised-models/lid.176.ftz"
+  pretrained_lang_model_url = "https://huggingface.co/julien-c/fasttext-language-id/resolve/main/lid.176.ftz"
+
+  dl_manager = DownloadManager()
+  return fasttext.load_model(dl_manager.download(pretrained_lang_model_url))
+
+
 def detect_lang(sentence: str) -> str:
+  model = get_fasttext_model()
   labels, probs = model.predict(sentence.replace("\n", " "), threshold=0.2)
   if len(labels) <= 0:
     return "unkown"
