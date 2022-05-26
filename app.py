@@ -16,7 +16,7 @@ def create_pipeline():
   model_config = dict(
     pretrained_model_name_or_path="K024/shiki-mt5-streaming",
     revision="main",
-    use_auth_token=os.environ["ACCESS_TOKEN"],
+    use_auth_token=os.environ["ACCESS_TOKEN"] if "ACCESS_TOKEN" in os.environ else None,
   )
 
   pipeline = Text2TextGenerationPipeline(
@@ -27,7 +27,7 @@ def create_pipeline():
   return pipeline
 
 
-def translate(pipeline, src_lang, trg_lang, source, aligned_output):
+def translate(pipeline, src_lang, trg_lang, source, infer_config):
   if "CTX_TRANSLATION" in st.session_state:
     del st.session_state["CTX_TRANSLATION"]
 
@@ -48,15 +48,6 @@ def translate(pipeline, src_lang, trg_lang, source, aligned_output):
   sentences, endls = text_utils.split_sentences(source)
   input_src = text_utils.prepare_contexts(sentences, src_lang, trg_lang)
 
-  infer_config = dict(
-    no_repeat_ngram_size=6,
-    repetition_penalty=1.2,
-    max_length=120,
-    do_sample=False,
-    num_beams=4,
-    batch_size=4,
-  )
-
   outputs = pipeline(input_src, **infer_config)
   results = [x["generated_text"] for x in outputs]
   joint_sentences = text_utils.join_sentences(results, endls, trg_lang)
@@ -64,21 +55,33 @@ def translate(pipeline, src_lang, trg_lang, source, aligned_output):
   st.session_state["CTX_TRANSLATION"] = [src_lang, sentences, results, joint_sentences]
 
 
-def translate_raw(pipeline, source):
-  infer_config = dict(
-    no_repeat_ngram_size=6,
-    repetition_penalty=1.2,
-    max_length=120,
-    do_sample=False,
-    num_beams=4,
-    batch_size=4,
-  )
-
+def translate_raw(pipeline, source, infer_config):
   input_src = [source]
   outputs = pipeline(input_src, **infer_config)
   results = [x["generated_text"] for x in outputs]
 
   return results[0]
+
+
+def generation_config():
+  with st.expander("Advanced generation config"):
+    col1, col2 = st.columns(2)
+    with col1:
+      temperature = st.slider("Temperature", value=1., min_value=0.05, max_value=2., step=0.05)
+      do_sample = st.checkbox("Do sampling", value=False)
+    with col2:
+      num_beams = st.slider("Beam size", value=4, min_value=1, max_value=10, step=1)
+      batch_size = st.slider("Batch size", value=8, min_value=1, max_value=16, step=1)
+
+  return dict(
+    num_beams=num_beams,
+    do_sample=do_sample,
+    temperature=temperature,
+    batch_size=batch_size,
+    max_length=120,
+    no_repeat_ngram_size=6,
+    repetition_penalty=1.2,
+  )
 
 
 st.set_page_config(
@@ -114,6 +117,8 @@ if tab == "Context-aware":
 
   source = st.text_area("Text to be translated")
 
+  infer_config = generation_config()
+
   col1, col2 = st.columns(2)
 
   with col1:
@@ -124,7 +129,7 @@ if tab == "Context-aware":
   if click:
     with st.spinner("Translating..."):
       pipeline = create_pipeline()
-      translate(pipeline, src_lang, trg_lang, source, aligned_output)
+      translate(pipeline, src_lang, trg_lang, source, infer_config)
 
   if "CTX_TRANSLATION" in st.session_state:
     detected_lang, sentences, results, joint_sentences = st.session_state["CTX_TRANSLATION"]
@@ -141,13 +146,14 @@ if tab == "Context-aware":
 
 elif tab == "Raw Input":
   raw_input = st.text_area("Raw input")
+  infer_config = generation_config()
+
   click = st.button("Execute")
 
   if click:
     with st.spinner("Executing..."):
-      
       pipeline = create_pipeline()
-      raw_output = translate_raw(pipeline, raw_input)
+      raw_output = translate_raw(pipeline, raw_input, infer_config)
 
     st.write(raw_output)
 
